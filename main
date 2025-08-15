@@ -1,0 +1,72 @@
+import re
+import pandas as pd
+from googlesearch import search
+from bs4 import BeautifulSoup
+import requests
+from concurrent.futures import ThreadPoolExecutor
+
+def extract_emails_from_url(url):
+    """Функція для вилучення email-адрес із вказаного URL."""
+    emails = []
+    try:
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code == 200:
+            # Пошук email за допомогою регулярного виразу
+            emails = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', response.text)
+    except Exception as e:
+        print(f"Помилка доступу до {url}: {e}")
+    return emails
+
+def process_query(query, num_results):
+    """Обробляє один запит, шукає сайти та витягує емейли."""
+    results = []
+    try:
+        print(f"Пошук за запитом: {query}")
+        search_results = search(query, num_results=num_results)
+        for url in search_results:
+            print(f"Аналізую: {url}")
+            emails = extract_emails_from_url(url)
+            for email in emails:
+                results.append({"Запит": query, "Email": email, "URL": url})
+    except Exception as e:
+        print(f"Помилка пошуку для {query}: {e}")
+    return results
+
+def main():
+    # Введення користувачем основного запиту
+    base_query = input("Введіть основний запит: ").strip()
+    
+    # Введення кількості результатів
+    try:
+        num_results = int(input("Введіть кількість результатів (наприклад, 10): ").strip())
+    except ValueError:
+        print("Будь ласка, введіть число.")
+        return
+
+    # Генерація варіацій запиту
+    queries = [
+        base_query,
+        base_query.lower(),
+        base_query.upper(),
+        base_query.capitalize()
+    ]
+
+    # Багатопоточна обробка запитів
+    all_results = []
+    with ThreadPoolExecutor() as executor:
+        futures = [executor.submit(process_query, query, num_results) for query in queries]
+        for future in futures:
+            all_results.extend(future.result())
+
+    # Збереження результатів у таблицю Excel
+    if all_results:
+        output_file = "emails.xlsx"
+        df = pd.DataFrame(all_results)
+        df.to_excel(output_file, index=False)
+        print(f"Результати збережено у файл {output_file}")
+    else:
+        print("Емейлів не знайдено.")
+
+if __name__ == "__main__":
+    main()
